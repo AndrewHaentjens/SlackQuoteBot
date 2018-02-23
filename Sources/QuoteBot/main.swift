@@ -5,4 +5,5 @@ import Foundation
 
 // With API token
 let quoteBot = QuoteBot(token: "API-KEY")
+
 RunLoop.main.run()

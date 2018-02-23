@@ -11,22 +11,14 @@ import SlackKit
 class QuoteBot {
     
     enum Command: String {
-        case addQuote = "addquote"
+        case addQuote = "addQuote"
         case showQuote = "showQuote"
     }
     
-    struct Quote {
-        var quote: String
-        var quoter: String
-    }
-    
     let quoteBot: SlackKit
+    let context = DataController.shared.container.viewContext
     
-    var quotes: [Quote] = [
-        Quote(quote: "Wa is den API van diene Cockring?", quoter: "Annihilator"),
-        Quote(quote: "yo mama so fat that ben kenobi said 'that's no moon..'", quoter: "Albion"),
-        Quote(quote: "Annihilator [4:01 PM] jah @linkmark die mag wel keer op mijne doedlezak blazen zenneeeh", quoter: "Albion")
-    ]
+    var quotes: [Quote] = []
     
     init(token: String) {
         
@@ -82,24 +74,58 @@ class QuoteBot {
     }
     
     private func handleCommand(_ command: Command, with message: Message) {
-        guard let quoteText = message.text/*, let quoter = message.username*/ else { return }
+        guard
+            let quoteText = message.text else {
+                return
+        }
         
         switch command {
         case .addQuote:
-            let quoteToAdd = Quote(quote: quoteText, quoter: "TEST")
-            quotes.append(quoteToAdd)
-
-        case .showQuote:
-            guard let channel = message.channel else {
-                return
+            
+            let errorText = "Something fuckedy is going on here. Maybe you should make a Jira ticket about it?"
+            let stringArray = quoteText.components(separatedBy: Command.addQuote.rawValue)
+            
+            if stringArray.count == 2 {
+                let quoteToAdd = Quote(context: context)
+                quoteToAdd.quote = stringArray[1]
+                quoteToAdd.quoter = ""
+                
+                DataController.shared.saveContext()
+                
+            } else {
+                guard let channel = message.channel else {
+                    return
+                }
+                
+                quoteBot.webAPI?.sendMessage(channel: channel, text: errorText, success: nil, failure: { (error) in
+                    debugPrint(error.localizedDescription)
+                })
             }
             
+        case .showQuote:
             let randomNumber = randomInt(min: 0, max: quotes.count - 1)
-            let quote = quotes[randomNumber].quote
             
-            quoteBot.webAPI?.sendMessage(channel: channel, text: quote, success: nil, failure: { [weak self] (error) in
+            loadQuotes()
+            
+            guard
+                let channel = message.channel,
+                let quote = quotes[randomNumber].quote else {
+                    return
+            }
+        
+            quoteBot.webAPI?.sendMessage(channel: channel, text: quote, success: nil, failure: { (error) in
                 debugPrint(error.localizedDescription)
             })
+        }
+    }
+    
+    private func loadQuotes() {
+        let request = Quote.createFetchRequest()
+        
+        do {
+            quotes = try context.fetch(request)
+        } catch (let error) {
+            debugPrint(error.localizedDescription)
         }
     }
     
